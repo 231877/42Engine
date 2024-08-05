@@ -1,112 +1,184 @@
-cfg.setting = {
-  music: 1, sounds: 1,
-  mute: false, user: false,
-  focus: true, listener: 10
-};
+/**
+ * @file Модуль аудио
+ * @author wmgcat
+ * @version 1.1
+*/
 
-let audiocontext = window.AudioContext || window.webkitAudioContext || false;
-modules.audio = {
-  title: 'audio', v: '1.0', stack: {}, listener: [],
-  context: audiocontext ? new audiocontext : false,
-  play: (id, loop) => {
-    if (!cfg.setting.mute && modules.audio.context && modules.audio.stack && modules.audio.stack[id]) modules.audio.stack[id].play(loop);
-  },
-  volume: (type, value) => {
-    if (modules.audio.context) {
-      if (!modules.audio[type + '_volume']) modules.audio[type + '_volume'] = modules.audio.context.createGain();
-      modules.audio[type + '_volume'].gain.value = value;
-    }
-  },
-  stop: id => {
-    if (modules.audio.stack && modules.audio.stack[id]) modules.audio.stack[id].stop();
+export const audio = {}
+
+audio.stack = {};
+audio.listener = [];
+audio.volumes = {};
+
+
+const MAX_LISTENER = 25;
+
+
+const windowAudioContext = window.AudioContext || window.webkitAudioContext || false;
+audio.context = windowAudioContext ? (new windowAudioContext) : false;
+
+// отключение методов навигатора:
+if ('mediaSession' in navigator) {
+  navigator.mediaSession.setActionHandler('play', () => { });
+  navigator.mediaSession.setActionHandler('pause', () => { });
+  navigator.mediaSession.setActionHandler('seekbackward', () => { });
+  navigator.mediaSession.setActionHandler('seekforward', () => { });
+  navigator.mediaSession.setActionHandler('previoustrack', () => { });
+  navigator.mediaSession.setActionHandler('nexttrack', () => { });
+}
+
+// перезагрузка аудио при переключении вкладок:
+if (audio.context)
+  audio.context.onstatechange = () => {
+    if (audio.context.state != 'interrupted') return;
+    audio.context.resume();
+  }
+
+/**
+ * Проигрывает звук/музыку
+ * 
+ * @param  {string} id Аудио
+ * @param  {bool} [loop=false] Зацикливание
+*/
+audio.play = function(id, loop=false, track=false) {
+  if (!this.context || !this.stack[id]) return;
+  
+  this.stack[id].play(loop, track);
+}
+
+/**
+ * Изменяет громкость дорожки, если ее нет - создает новую
+ * 
+ * @param  {string} id Название дорожки
+ * @param  {number} [value=1] Громкость (0..1)
+*/
+audio.volume = function(id, value=1) {
+  if (!this.context) return;
+
+  if (!(id in this.volumes)) {
+    this.volumes[id] = this.context.createGain();
+    this.volumes[id].save = value;
+  }
+  this.volumes[id].gain.value = value;
+}
+
+/**
+ * Останавливает проигрывание звука/музыки
+ * 
+ * @param  {string} id Аудио
+*/
+audio.stop = function(id) {
+  if (!this.stack[id] || !this.context) return;
+
+  this.stack[id].stop();
+}
+
+/**
+ * Класс звука
+ * @constructor
+*/
+class Sound {
+  /**
+   * @param  {object} buffer Аудио буффер
+   * @param  {string} track Звуковая дорожка
+  */
+  constructor(buffer, track) {
+    this.buffer = buffer;
+    this.track = track;
+    this.index = -1;
+  }
+
+  /**
+   * Проигрывание звука/музыки
+   * 
+   * @param  {bool} loop Зацикливание
+  */
+  play(loop, volume=false) {
+    if (audio.listener.length > MAX_LISTENER) return;
+
+    audio.listener.push(audio.context.createBufferSource());
+    
+    this.index = audio.listener[audio.listener.length - 1];
+    this.index.buffer = this.buffer;
+    this.index.connect(audio.volumes[volume || this.track]).connect(audio.context.destination);
+    if (this.index.start) this.index.start(audio.context.currentTime);
+
+    this.index.onended = () => this.stop();
+    this.index.loop = loop;
+  }
+
+  /**
+   * Останавливает звук
+  */
+  stop() {
+    if (this.index == -1) return;
+
+    if (this.index.stop) this.index.stop();
+    
+    let index = audio.listener.indexOf(this.index);
+    if (~index)
+      audio.listener = audio.listener.splice(index, 1);
+    this.index = -1;
   }
 }
-if (modules.audio.context) modules.audio.context.onstatechange = () => {
-  if (modules.audio.context.state === "interrupted") modules.audio.context.resume();
-}
 
-Add.audio = function(type='sounds', source) {
-  if (Object.keys(arguments).length > 1) {
-    mloaded++;
-    let path = source.split('/');
-    if (path[0] == '.') path = path.splice(1, path.length - 1);
-    ['.wav', '.ogg', '.mp3'].forEach(assoc => { path[path.length - 1] = path[path.length - 1].replace(assoc, ''); });
-    let req = new XMLHttpRequest();
-    req.open('GET', source, true);
-    req.responseType = 'arraybuffer';
+/**
+ * Добавление звуков и установка их дорожки
+ * 
+ * @param  {Game} game Объект игры
+ * @param {string} path Путь до файла
+ * @param {string} [type=sounds] Тип аудиофайла
+*/
+export async function add(game, path, type='sounds') {
+  
+
+  const req = new XMLHttpRequest();
+  req.open('GET', path, true);
+  req.responseType = 'arraybuffer';
+  return new Promise((res, rej) => {
+
     req.onload = () => {
-      let sa = req.response;
-      modules.audio.context.decodeAudioData(req.response, buff => {
-        loaded++;
-        if (modules.audio.stack) modules.audio.stack[path.join('.')] = new Sound(buff, type);
+      audio.context.decodeAudioData(req.response, buffer => {
+        if (!audio.stack) return;
+
+        let npath = path.split('/');
+        if (npath[0] == '.') npath = npath.splice(1, npath.length - 1);
+        if (npath[0] == 'data') npath = npath.splice(1, npath.length - 1);
+        for (const ext of ['.wav', '.ogg', '.mp3'])
+          npath[npath.length - 1] = npath[npath.length - 1].replace(ext, '');
+        npath = npath.join('.');
+        audio.stack[npath] = new Sound(buffer, type);
+        res(true);
       });
     }
+    req.onerror = err => { rej(err); }
     req.send();
-  } else {
-    if (typeof(type) == 'object') {
-      Object.keys(type).forEach(key => Add.audio(type[key], key));
-    } else Add.error('type audio not find!');
-  }
-}
-Eng.focus = value => {
-  switch(value) {
-    case true:
-      cfg.setting.focus = true;
-      if (!cfg.setting.mute) {
-        audio.volume('music', cfg.setting.music);
-        audio.volume('sounds', cfg.setting.sounds);
-      }
-      window.focus();
-    break;
-    case false:
-      cfg.setting.focus = false;
-      audio.volume('music', 0);
-      audio.volume('sounds', 0);
-      window.blur();
-    break;
-  }
+  });
 }
 
-window.onblur = () => {
-  cfg.setting.focus = false;
-  modules.audio.volume('music', 0);
-  modules.audio.volume('sounds', 0);
-}
-window.onfocus = () => { modules.audio.context.suspend().then(() => {
-  cfg.setting.focus = true;
-  if (!cfg.setting.mute) {
-    audio.volume('music', cfg.setting.music);
-    audio.volume('sounds', cfg.setting.sounds);
-  }
-}); }
+/**
+ * Добавление звука с помощью require
+ *
+ * @param  {Game} game Объект игры
+ * @param {string} path Путь до файла
+ * @param {string} [type=sounds] Тип аудиофайла
+ * @param {string} id ID звука
+*/
+export async function addPath(game, path, type, id) {
+  const req = new XMLHttpRequest();
+  req.open('GET', path, true);
+  req.responseType = 'arraybuffer';
+  return new Promise((res, rej) => {
 
-class Sound {
-	constructor(sa, type) {
-		this.audio = sa, this.type = type, this.index = -1;
-	}
-	play(loop) {
-		if (modules.audio.context && cfg.setting.user) {
-			if (!cfg.setting.mute) {
-        if (modules.audio.listener.length <= cfg.setting.listener) {
-          modules.audio.listener.push(modules.audio.context.createBufferSource());
-          this.index = modules.audio.listener[modules.audio.listener.length - 1];
-          this.index.buffer = this.audio;
-          this.index.connect(modules.audio[this.type + '_volume']).connect(modules.audio.context.destination);
-          if (this.index.start) this.index.start(modules.audio.context.currentTime);
-          this.index.onended = () => { this.stop(); }
-          this.index.loop = loop;
-        }
-      } else {
-        //if (this.index.loop) this.stop();
-      }
-		}
-	}
-	stop() { 
-		if (modules.audio.context && this.index != -1) {
-			if (this.index.stop) this.index.stop();
-			let ind = modules.audio.listener.findIndex(e => { return e == this.index; });
-			if (ind != -1) modules.audio.listener = modules.audio.listener.splice(ind, 1);
-			this.index = -1;
-		}
-	}
+    req.onload = () => {
+      audio.context.decodeAudioData(req.response, buffer => {
+        if (!audio.stack) return;
+
+        audio.stack[id] = new Sound(buffer, type);
+        res(true);
+      });
+    }
+    req.onerror = err => { rej(err); }
+    req.send();
+  });
 }

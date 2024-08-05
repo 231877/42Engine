@@ -1,37 +1,70 @@
-modules.language = {
-  title: 'language', v: '1.0',
-  table: {}, select: '',
-  use: function(args) {
-    let text = arguments['0'];
-    for (let i = 0; i < arguments.length; i++) {
-      if (!i) {
-        let path = arguments[i].split('.'), pos = 0, arr = modules.language.table[modules.language.select] || {};
-        while(arr[path[pos]]) {
-          if (typeof(arr[path[pos]]) == 'string') {
-            text = arr[path[pos]];
-            break;
-          }
-          arr = arr[path[pos++]];
-        }
-      } else { if (text) text = text.replace('%s', modules.language.use(arguments[i])); }
-    }
-    return text;
+/**
+ * @file Модуль локализации
+ * @author wmgcat
+ * @version 2.0
+*/
+
+const table = {};
+let select = '';
+
+class Language {
+  constructor(short, json, primary=false) {
+    this._short = short;
+    this.source = json;
+    this.data = recursiveTableMove(json);
+    table[short] = this;
+    
+    if (primary)
+      select = short;
   }
 }
 
-Add.language = async function(path, short, is_first=false) {
-  try {
-    mloaded++;
-    let script = document.createElement('script'), promise = new Promise((res, rej) => {
-      script.onload = () => {
-        modules.language.table[short] = Eng.copy(Lang);
-        if (is_first) modules.language.select = short;
-        loaded++;
-        res(true);
-      }
-      script.onerror = () => { rej(path); }
-    });
-    script.src = path;
-    document.body.appendChild(script);
-  } catch(err) { Add.error(err, ERROR.NOFILE); }
+/**
+ * Перевод текста на выбранную локализацию
+ * 
+ * @param  {id} id Ключ (Пример: items -> apple = items.apple)
+ * @param {...params} params Доп. параметры, которые подставляются в %s
+ * @return {string}
+*/
+function use(id, ...params) {
+  if (!id) throw Error('Не указан ни один аргумент!');
+
+  let text = ((table[select] || {}).data[id]) || id;
+  for (const param of params)
+    text = text.replace('%s', use(param));
+
+  return text;
+}
+
+/**
+ * Рекурсивная функция для возвращения ключей
+ * 
+ * @param {object} obj Объект с ключами
+ * @param {string|bool} [param=false] Параметр, который добавляется к ключам в новом объекте
+ * @return {object}
+*/
+function recursiveTableMove(obj, param=false) {
+  const nparam = param ? `${param}.` : '';
+  let nobj = {};
+
+  for (const key of Object.keys(obj)) {
+    if (typeof(obj[key]) == 'object') {
+      nobj = Object.assign({}, recursiveTableMove(obj[key], `${nparam}${key}`), nobj);
+    } else
+    nobj[`${nparam}${key}`] = obj[key];
+  }
+
+  return nobj;
+}
+
+function change(lang) {
+  if (table[lang]) {
+    select = lang;
+  }
+}
+
+export {
+  Language, table, select,
+  use, recursiveTableMove,
+  change
 }

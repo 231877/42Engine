@@ -1,254 +1,273 @@
-// hook:
+/**
+ * @file Основной функционал движка
+ * @author wmgcat
+*/
 
-String.prototype.replaceAll = function(match, replace) {
-  return this.replace(new RegExp(match, 'g'), () => replace);
-}
+import { Byte } from './modules/byte.js';
+import { Graphics } from './modules/graphics/main.js';
+import * as LoadingScreen from './src/loadingScreen.js';
+import * as SiteLock from './src/sitelock/main.js';
 
-const ERROR = { 
-  NOFILE: 1, NOSUPPORT: 2 
-}
+export class Game {
+  constructor(id, params={}) {
+    if (SiteLock.check(params.blacklist))
+      params.locked = true;
 
-let cfg = {
-  title: '42eng.js', debug: false,
-  build: {
-    v: 1.7,
-    href: 'github.com/wmgcat/42eng'
-  },
-  grid: 32, zoom: 1,
-  window: {
-    width: 800, height: 600,
-    fullscreen: true, id: 'game'
-  },
-  modulepath: './modules/'
-};
+    this.config = {
+      title: params.title || '42eng', author: params.author || 'wmgcat',
+      debug: params.debug || false,
+      build: {
+        v: '1.8',
+        href: 'https://github.com/wmgcat/42eng'
+      },
+      window: {
+        id: id,
+        percent: params.percent || 1,
+        hideCursor: params.hideCursor || false,
+        nopixel: params.pixel || false,
+        hdrmax: params.hdrmax || 2
+      },
+      smooth: params.smooth || false,
+      locked: params.locked,
+      redirect: params.redirect,
+      happytimer: params.happytimer || 15
+    }
 
-let Eng = {
-	id: () => {
-		let a4 = () => { return (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1); }, separator = '.';
-		return '#id' + a4() + a4() + separator + a4() + a4() + separator + a4() + a4() + separator + a4() + a4();
-	},
-	copy: source => {
-		let arr = {};
-		Object.keys(source).forEach(function(e) { arr[e] = source[e]; });
-		return arr;
-	},
-	console: () => {
-    let img = [
-      `      /\\`,
-      `     /  \\        42eng.js by wmgcat`,
-      `    /    \\       v: ${cfg.build.v}`,
-      `   /......\\      ${cfg.build.href}`,
-      `  < o L o >`
-    ];
-    let sum = '';
-    img.forEach(line => { sum += line + '\n'; });
-    console.log(sum);
+    this.current_time = 0;
+    this.delta = Date.now();
+    this.deltatime = 0;
+    this.pause = false;
+    this.focus = false;
+    this.resized = false;
+    this.canvasID = document.getElementById(id);
+    this.loaded = false;
+    this.ratio = 0;
+    
+    this.ignoreKeyboard = false;
+    this.ignoreMouse = false;
+
+    this.mouse = {
+      x: 0, y: 0,
+      event: new Byte('uclick', 'dclick', 'hover', 'wheelup', 'wheeldown')
+    }
+
+    if (!this.canvasID) throw Error(`Канвас ${id} не найден!`);
+
+    // стили:
+    this.style();
+    
+    window.onload = () => {
+      this.resize();
+      this.graphics = new Graphics(this.canvasID, this.config.smooth);
+    }
+    this.resize();
+    this.graphics = new Graphics(this.canvasID, this.config.smooth);
+
+    this.events = [];
+    this.listenEvents();
+    this.canvasID.focus();
   }
-};
 
-let loaded = 0, mloaded = 0, current_time = 0, current_level = 0, current_camera = 0, is_loaded = false;
-let pause = false, editor = false, levelChange = false, is_touch = false;
-let render = [], gui = [], cameraes = [{'x': 0, 'y': 0}], modules = {};
-let keylocks = {}, grid = {}, levelMemory = {}, objects = {}, templates = {}, images = {};
-let mouse = {'x': 0, 'y': 0, 'touch': {'x': 0, 'y': 0}};
+  /** Выводит информацию о проекте */
+  info() {
+    console.info(`Движок: 42eng (v${this.config.build.v})\n${this.config.build.href}`);
+  }
 
-let Add = {
-	rule: function(char, key) {
-		if (typeof(char) == 'object') { Object.keys(char).forEach(function(k) { keylocks[k] = char[k]; });
-		} else {
-			if (arguments.length > 2) for (let i = 0; i < arguments.length; i += 2) keylocks[arguments[i]] = arguments[i + 1];
-			else keylocks[char] = key;
-		}
-	},
-	script: async function(source) {
-		try {
-      for (let i = 0; i < arguments.length; i++) {
-        mloaded++;
-        let script = document.createElement('script'), promise = new Promise((res, rej) => {
-          script.onload = function() {
-            loaded++;
-            res(true);
-          }
-          script.onerror = function() { rej(arguments[i]);  }
-        });
-        script.type = 'text/javascript';
-        script.src = arguments[i];
-        document.head.appendChild(script);
-        await promise;
+  style() {
+    const all = document.querySelectorAll('html, body, canvas');
+    for (const elem of all) {
+      elem.style.cssText = "\
+        margin: 0;\
+        padding: 0;\
+      ";
+      switch(elem.tagName) {
+        case 'BODY':
+          elem.style.cssText += "\
+            background: #1e0528;\
+            overflow: hidden;\
+            -webkit-touch-callout:none;\
+            -webkit-user-select:none;\
+            -khtml-user-select:none;\
+            -moz-user-select:none;\
+            -ms-user-select:none;\
+            user-select:none;\
+            -webkit-tap-highlight-color:rgba(0,0,0,0);\
+            touch-action: manipulation;\
+          ";
+        break;
+          case 'CANVAS':
+            elem.style.cssText += "\
+              -webkit-touch-callout:none;\
+              -webkit-user-select:none;\
+              -khtml-user-select:none;\
+              -moz-user-select:none;\
+              -ms-user-select:none;\
+              user-select:none;\
+              -webkit-tap-highlight-color:rgba(0,0,0,0);\
+              touch-action: manipulation;\
+              position: absolute;\
+              image-rendering: optimizeSpeed;\
+              z-index: 5;\
+              top: 0;\
+              left: 0;\
+              border: none;\
+              outline: none;\
+            ";
+        break;
       }
-    } catch(err) { return this.error(err, ERROR.NOFILE); }
-	},
-	error: (msg, code=0) => { console.log('ERROR!', msg, code); },
-	canvas: (gameinit, update, loading) => {
-		let cvs = document.getElementById(cfg.window.id);
-		if (!cvs) {
-			cvs = document.createElement('canvas');
-			let w = cfg.window.width, h = cfg.window.height;
-			if (cfg.window.fullscreen) {
-				w = document.body.clientWidth;
-				h = document.body.clientHeight;
-			}
-			cvs.width = w;
-			cvs.height = h;
-			document.body.appendChild(cvs);
-		}
-		let ctx = cvs.getContext('2d');
-		let keyChecker = e => {
-			if (modules.audio) Eng.focus(true);
-    		cfg.setting.user = true;
-    		audio.context.resume();
-    		if (e.code.toLowerCase() == 'tab') {
-    			e.preventDefault();
-				  e.stopImmediatePropagation();
-    		}
-    		Object.keys(keylocks).forEach(function(f) {
-				if (e.code.toLowerCase().replace('key', '') == f) {
-					switch(e.type) {
-						case 'keydown': byte.add(keylocks[f]); break;
-						case 'keyup': byte.clear(keylocks[f]); break;
-					}
-					e.preventDefault();
-					e.stopImmediatePropagation();
-				}
-			});
-		}, mouseChecker = e => {
-      let xoff = (e.type == 'mousedown' || e.type == 'mouseup' || e.type == 'mousemove') ? e.offsetX : e.changedTouches[0].clientX,
-			    yoff = (e.type == 'mousedown' || e.type == 'mouseup' || e.type == 'mousemove') ? e.offsetY : e.changedTouches[0].clientY;
-			switch(e.type) {
-				case 'mousedown': case 'mouseup': case 'mousemove':
-					mouse.x = cameraes[current_camera].x + xoff;
-					mouse.y = cameraes[current_camera].y + yoff;
-				break;
-				case 'touchstart': case 'touchend': case 'touchmove':
-					mouse.x = cameraes[current_camera].x + xoff;
-					mouse.y = cameraes[current_camera].y + yoff;
-					mouse.touch = { x: xoff, y: yoff };
-				break;
-			}
-			switch(e.type) {
-				case 'mouseup': case 'touchend':
-					is_touch = false;
-					byte.add('uclick');
-					cvs.focus();
-				break;
-				case 'mousedown': case 'touchstart': byte.add('dclick'); break;
-			}
-			if (e.type == 'touchstart') is_touch = true;
-			if (modules.audio) {
-        cfg.setting.user = true;
-			  modules.audio.context.resume();
-			  Eng.focus(true);
-			}
+    }
+  }
+
+  resize() {
+    this.resized = true;
+    const pixel = this.config.window.nopixel ? 1 : (Math.min(this.config.window.hdrmax, window.devicePixelRatio) || 1);
+    
+    this.canvasID.style.width = `${window.innerWidth}px`;
+    this.canvasID.style.height = `${window.innerHeight}px`;
+    
+    this.canvasID.width = window.innerWidth * this.config.window.percent * pixel;
+    this.canvasID.height = window.innerHeight * this.config.window.percent * pixel;
+    
+    if (this.graphics)
+      this.graphics.reset();
+  }
+
+  addEvent(control) {
+    this.events.push(control);
+    this.listenEvents();
+  }
+
+  event(type, ...params) {
+    console.log(type, params);
+  }
+
+  listenEvents() {
+    window.onkeyup = window.onkeydown = e => {
+      if (this.ignoreKeyboard) return;
+      if (e.type == 'keyup')
+        this.event('anykey');
+      for (const control of this.events)
+        if (!control.event(e))
+          return;
+
       e.preventDefault();
-		}, ready = () => {
-			addEventListener('keydown', keyChecker, false);
-			addEventListener('keyup', keyChecker, false);
-			if (modules.audio) Eng.focus(true);
-		}, resize = () => {
-			try {
-				let w = cfg.window.width, h = cfg.window.height;
-				if (cfg.window.fullscreen) {
-					w = document.body.clientWidth, h = document.body.clientHeight;
-					cfg.window.width = w;
-					cfg.window.height = h;
-				}
-				cvs.width = w, cvs.height = h;
-				obj.ctx = cvs.getContext('2d');
-				obj.ctx.imageSmoothingEnabled = false;
-			}
-			catch(err) { Add.error(err.message); }
-		}, temp = t => {
-      gui = [];
-      if (loaded >= mloaded && !is_loaded) {
-        if (gameinit) gameinit();
-        is_loaded = true;
+      e.stopImmediatePropagation();
+    }
+    window.onresize = () => {
+      this.resize();
+      this.graphics.reset();
+      this.event('resize');
+    }
+    
+    const getMousePosition = event => {
+      const pixel = this.config.window.nopixel ? 1 : (Math.min(this.config.window.hdrmax, window.devicePixelRatio) || 1);
+      const rect = this.canvasID.getBoundingClientRect();
+      this.mouse.x = event.clientX * this.config.window.percent * pixel - rect.left;
+      this.mouse.y = event.clientY * this.config.window.percent * pixel - rect.top;
+    }, getTouchPosition = event => {
+      const pixel = this.config.window.nopixel ? 1 : (Math.min(this.config.window.hdrmax, window.devicePixelRatio) || 1);
+      const rect = this.canvasID.getBoundingClientRect();
+      this.mouse.x = event.changedTouches[0].clientX * this.config.window.percent * pixel - rect.left;
+      this.mouse.y = event.changedTouches[0].clientY * this.config.window.percent * pixel - rect.top;
+    }
+
+    window.onmouseup = window.onmousedown = window.ontouchstart = window.ontouchend = e => {
+      if (this.ignoreMouse) return;
+      this.event('focus');
+      if (e.type == 'touchstart' || e.type == 'touchend') {
+        this.mouse.isTouch = true;
+        getTouchPosition(e);
+        this.mouse.event.add((e.type == 'touchend') ? 'uclick' : 'dclick');
+      } else {
+        if (e.button == 0) {
+          this.mouse.isTouch = false;
+          getMousePosition(e);
+          this.mouse.event.add((e.type == 'mouseup') ? 'uclick' : 'dclick');
+        }
       }
-      if (is_loaded) {
-        ctx.save();
-        ctx.fillRect(0, 0, cvs.width, cvs.height);
-        ctx.scale(cfg.zoom, cfg.zoom);
-        ctx.translate(-cameraes[current_camera].x / cfg.zoom, -cameraes[current_camera].y / cfg.zoom);
-        update(current_time);
-        Object.keys(objects).sort((a, b) => (objects[a].yr || objects[a].y) - (objects[b].yr || objects[b].y)).forEach(id => {
-          let obj = objects[id];
-          if (!obj.is_create && obj.create && !editor) {
-            obj.create();
-            obj.is_create = true;
+      if (e.type == 'touchend' || e.type == 'mouseup')
+        this.event('anykey');
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }
+    
+    window.onmousemove = window.ontouchmove = e => {
+      if (this.ignoreMouse) return;
+      if (e.type == 'mousemove') {
+        getMousePosition(e);
+        this.mouse.isTouch = false;
+      } else {
+        getTouchPosition(e);
+        this.mouse.isTouch = true;
+      }
+    }
+
+    this.canvasID.onwheel = e => e.preventDefault();
+    this.canvasID.oncontextmenu = e => e.preventDefault();
+
+    window.onfocus = () => { this.event('focus'); }
+    window.onblur = () => { this.event('blur'); }
+  }
+
+  update(draw) {
+    const _update = () => {
+      const timenow = performance.now(),
+            deltatime = (timenow - this.delta) * .001;
+      this.deltatime = deltatime;
+
+      if (this.graphics) {
+        
+        if (this.resized) {
+          this.ratio = Math.min(this.graphics.w, this.graphics.h);
+          this.resized = false;
+        }
+        if (!this.loaded) LoadingScreen.draw(this.graphics, this, this.ratio);
+        else draw(deltatime, this.graphics, this.ratio);
+        
+        if (this.config.locked) {
+          if (!this.config.lockedTimer) {
+            this.config.lockedTimer = new SiteLock.Timer(this.config.happytimer);
+          } else {
+            if (this.config.lockedTimer.check()) {
+              SiteLock.draw(this.graphics, this, this.ratio);
+              if (this.config.redirect) {
+                const a = document.createElement('a');
+                a.href = this.config.redirect;
+                a.target = '_blank';
+                a.style.position = 'fixed';
+                a.style.top = '0';
+                a.style.left = '0';
+                a.style.width = '100vw';
+                a.style.height = '100vh';
+                a.style.zIndex = '100';
+                document.body.appendChild(a);
+
+                delete this.config.redirect;
+              }
+            }
           }
-          if (obj.update && !pause) obj.update();
-          if (obj.draw) obj.draw(ctx);
-        });
-        ctx.restore();
-      } else loading(loaded / mloaded, current_time);
-      gui.reverse().forEach(function(e) { e(ctx); });
-      if (modules.byte) {
-        cvs.style.cursor = byte.check('hover') ? 'pointer' : 'default';
-        byte.clear('hover', 'dclick', 'uclick');
+        }
       }
-      current_time = t;	
-			window.requestAnimationFrame(temp);
-		}
-		window.onmousedown = window.onmouseup = window.onmousemove = cvs.ontouchstart = cvs.ontouchend = cvs.ontouchmove = mouseChecker;
-		ready();
-		if ('mediaSession' in navigator) {
-		  navigator.mediaSession.setActionHandler('play', () => { })
-		  navigator.mediaSession.setActionHandler('pause', () => { })
-		  navigator.mediaSession.setActionHandler('seekbackward', () => { })
-		  navigator.mediaSession.setActionHandler('seekforward', () => { })
-		  navigator.mediaSession.setActionHandler('previoustrack', () => { })
-		  navigator.mediaSession.setActionHandler('nexttrack', () => { })
-		} 
-    let obj = { id: cvs, cvs: ctx, update: temp, init: gameinit }
-		window.onresize = document.body.onresize = cvs.onresize = resize;
-		resize();
-		Eng.console();
-		return obj;
-	},
-	object: (obj, x=0, y=0, nid=false) => {
-    if (typeof(obj) == 'string') obj = templates[obj];
-		let id = nid || Eng.id(); 
-    objects[id] = Object.assign(Object.create(Object.getPrototypeOf(obj)), obj);
-    objects[id].x = x;
-    objects[id].y = y;
-    objects[id].id = id;
-    return objects[id];
-	},
-	gui: func => gui.push(func),
-	debug: function(arg) { if (cfg.debug) console.log('[DEBUG!]', ...arguments); },
-  module: async function() {
-    try {
-      for (let i = 0; i < arguments.length; i++) {
-        mloaded++;
-        let name = arguments[i], script = document.createElement('script'), promise = new Promise((res, rej) => {
-          script.onload = function() {
-            let source = name.split('.js')[0].split('/').slice(-1)[0];
-            loaded++;
-            window[source] = modules[source];
-            Add.debug(`added: ${source} module!`);
-            res(true);
-          }
-          script.onerror = function() { rej(name); }
-        });
-        script.type = 'text/javascript';
-        script.src = `${cfg.modulepath}${name}.js`;
-        document.head.appendChild(script);
-        await promise;
-      }
-    } catch(err) { return this.error(err, ERROR.NOFILE); }
+
+      this.delta = timenow;
+      this.current_time = (this.current_time + deltatime * 4) % 1000;
+
+      if (!this.config.window.hideCursor)
+        this.canvasID.style.cursor = this.mouse.event.check('hover') ? 'pointer' : 'default';
+      else this.canvasID.style.cursor = 'none';
+      if (this.mouse.event.key)
+        this.mouse.event.clear('uclick', 'hover', 'dclick');
+
+      this.requestAnimationFrame(_update);
+    }
+    _update();
+  }
+
+  requestAnimationFrame(func) {
+    (window.requestAnimationFrame || window.webkitRequestAnimationFrame ||
+    window.mozRequestAnimationFrame || window.oRequestAnimationFrame ||
+    window.msRequestAnimationFrame || function(res) {
+      window.setTimeout(res, 1000 / 60);
+    })(func);
   }
 }
-
-class Obj {
-  constructor(name='undefined') {
-    this.name = name;
-    this.x = this.y = this.image_index = 0;
-    templates[name] = this;
-  }
-  destroy() {
-    if (this.delete) objects[this.id].delete();
-    delete objects[this.id];
-    return true;
-  }
-}
-
-
