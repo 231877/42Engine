@@ -68,7 +68,7 @@ export class Timer {
   */
   reset(x=0) {
     if (!x) this.point = Date.now() + this._max;
-    else this.point = x;
+    else this.point = Date.now() + x * this._max;
   }
 
   /**

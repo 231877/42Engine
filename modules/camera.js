@@ -3,7 +3,7 @@ export class Camera {
     this.x = x;
     this.y = y;
   }
-  view(cvs) { cvs.source.translate(-this.x, -this.y); }
+  view(cvs) { /*cvs.source.translate(-this.x, -this.y);*/ }
 
-  reset(cvs) { cvs.source.translate(this.x, this.y); }
+  reset(cvs) { /*cvs.source.translate(this.x, this.y);*/ }
 }

@@ -30,7 +30,8 @@ export class Game {
       smooth: params.smooth || false,
       locked: params.locked,
       redirect: params.redirect,
-      happytimer: params.happytimer || 15
+      happytimer: params.happytimer || 15,
+      multitab: params.multitab || false
     }
 
     this.current_time = 0;
@@ -51,6 +52,13 @@ export class Game {
       event: new Byte('uclick', 'dclick', 'hover', 'wheelup', 'wheeldown')
     }
 
+    if (this.config.multitab && typeof(BroadcastChannel) != 'undefined') {
+      this.multitab = new BroadcastChannel(`${this.config.title}-multitab`);
+      this.multitab.postMessage('new');
+      this.multitab.onmessage = _ => { this.event('newtab'); }
+    }
+
+
     if (!this.canvasID) throw Error(`Канвас ${id} не найден!`);
 
     // стили:
@@ -58,10 +66,10 @@ export class Game {
     
     window.onload = () => {
       this.resize();
-      this.graphics = new Graphics(this.canvasID, this.config.smooth);
+      this.graphics = new Graphics(this.canvasID, this.config.smooth, this);
     }
     this.resize();
-    this.graphics = new Graphics(this.canvasID, this.config.smooth);
+    this.graphics = new Graphics(this.canvasID, this.config.smooth, this);
 
     this.events = [];
     this.listenEvents();
@@ -210,19 +218,36 @@ export class Game {
   }
 
   update(draw) {
+    
+   
+    
+
     const _update = () => {
-      const timenow = performance.now(),
-            deltatime = (timenow - this.delta) * .001;
-      this.deltatime = deltatime;
+      const timenow = performance.now();
+      this.deltatime = Math.min((timenow - this.delta) * .001, .05);
+      this.delta = timenow;
 
       if (this.graphics) {
+        this.graphics.source.viewport(0, 0, this.graphics.w, this.graphics.h);
+        this.graphics.source.clearColor(0.11, 0.01, 0.15, 1.0);
+        this.graphics.source.clear(this.graphics.source.COLOR_BUFFER_BIT);
+        this.graphics.source.enable(this.graphics.source.BLEND);
+        this.graphics.source.blendFunc(this.graphics.source.SRC_ALPHA, this.graphics.source.ONE_MINUS_SRC_ALPHA);
+
+
         
+
+        
+
         if (this.resized) {
           this.ratio = Math.min(this.graphics.w, this.graphics.h);
           this.resized = false;
         }
+
+
+
         if (!this.loaded) LoadingScreen.draw(this.graphics, this, this.ratio);
-        else draw(deltatime, this.graphics, this.ratio);
+        else draw(this.deltatime, this.graphics, this.ratio);
         
         if (this.config.locked) {
           if (!this.config.lockedTimer) {
@@ -249,15 +274,15 @@ export class Game {
         }
       }
 
-      this.delta = timenow;
-      this.current_time = (this.current_time + deltatime * 4) % 1000;
+      //this.delta = timenow;
+      this.current_time = (this.current_time + this.deltatime * 4) % 1000;
 
       if (!this.config.window.hideCursor)
         this.canvasID.style.cursor = this.mouse.event.check('hover') ? 'pointer' : 'default';
       else this.canvasID.style.cursor = 'none';
       if (this.mouse.event.key)
         this.mouse.event.clear('uclick', 'hover', 'dclick');
-
+      this.graphics.source.enableVertexAttribArray(this.graphics.positionLocation);
       this.requestAnimationFrame(_update);
     }
     _update();
@@ -271,3 +296,5 @@ export class Game {
     })(func);
   }
 }
+
+

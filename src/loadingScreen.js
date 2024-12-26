@@ -3,7 +3,7 @@ import { Ease } from '../modules/math/main.js';
 
 let logo = false, alpha = 0;
 export function draw(cvs, Game, ratio) {
-  cvs.rect(0, 0, cvs.w, cvs.h, '#000');
+  //cvs.rect(0, 0, cvs.w, cvs.h, '#000');
   if (!logo) {
     logo = new Image(Game, require('./logo.svg'), 0, 0, 512, 512, 256, 256, 1);
     logo.load();
@@ -20,7 +20,7 @@ export function draw(cvs, Game, ratio) {
             y = cvs.h * .5 + ratio * .2 + size;
       for (let i = 0; i < count; i++) {
         cvs.source.globalAlpha = Ease.InOutCirc(1 - ((((count - i) + Game.current_time) * .1) % 1));
-        cvs.circle(x + (size + offset) * i, y + Ease.InQuint(Math.abs(Math.sin(Game.current_time * .25 + i))) * size, size, '#fff');
+        cvs.circle(x + (size + offset) * i, y + Ease.InQuint(Math.abs(Math.sin(Game.current_time * .25 + i))) * size, size, '#ffffff');
       }
     }
     cvs.source.globalAlpha = 1;

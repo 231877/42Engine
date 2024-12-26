@@ -1,5 +1,5 @@
 import { Graphics } from '../main.js';
-
+import { _Image as Image } from './image.js';
 
 const ALIGN = {
   'left-top': ['left', 'top'],
@@ -31,6 +31,8 @@ export class Text {
     this._font = font;
     this._size = size;
     this.type = ' ';
+
+    this.cache = {};
   }
 
   get source() {
@@ -73,7 +75,8 @@ export class Text {
   width(str) {
     this.source.font = this.font;
     if (typeof(str) == 'string')
-      return this.source.measureText(str).width;
+      return str.length * this._size;
+      //return this.source.measureText(str).width;
     
     return str.map(line => this.width(line)).sort((a, b) => b - a)[0];
   }
@@ -88,11 +91,28 @@ export class Text {
    * @param {string} [type=fill] Заполнение, может быть fill или stroke
    * @param {string} [align=lt] Положение текста
   */
-  draw(str, x, y, color='#000', type='fill', align='lt') {
-    this.source.font = this.font;
-    [this.source.textAlign, this.source.textBaseline] = ALIGN[align];
-    this.source[type + 'Style'] = color;
-    this.source[type + 'Text'](str, x, y);
+  async draw(str, x, y, color='#000', type='fill', align='lt', program=this.graphics.programList.image, params={}) {
+    const id = `${str}_${align}`
+    if (!this.cache[id] || this.cache[id][1] != this._size || this.cache[id][2] != color) {
+      const cid = document.createElement('canvas');
+      cid.height = this._size;
+      let cvs = cid.getContext('2d');
+      cvs.font = this.font;
+      cid.width = cvs.measureText(str).width;
+      cvs = cid.getContext('2d');
+      cvs.font = this.font;
+      [cvs.textAlign, cvs.textBaseline] = ALIGN[align];
+      cvs[type + 'Style'] = color;
+
+      let left = (cvs.textAlign == 'center') ? (cid.width * .5) : (cvs.textAlign == 'left' ? 0 : cid.width),
+          top = (cvs.textBaseline == 'middle') ? (cid.height * .5) : (cvs.textBaseline == 'top' ? 0 : cid.height);
+      cvs[type + 'Text'](str, left, top);
+
+      this.cache[id] = [new Image(this.graphics.game, cid.toDataURL('image/png'), 0, 0, cid.width, cid.height, left, top, 1), this._size, color];
+      await this.cache[id][0].load();
+    }
+
+    this.cache[id][0].draw(x, y, undefined, undefined, undefined, undefined, undefined, undefined, program, params);
   }
 
   /**
@@ -131,16 +151,12 @@ export class Text {
    * @param {string} [type=fill] Заполнение, может быть fill или stroke
    * @param {string} [align=left-top] Положение текста
   */
-  drawMultiLine(str, x, y, color='#000', type='fill', align='lt') {
-    if (typeof(str) != 'object') return;
-    this.source.font = this.font;
-    [this.source.textAlign, this.source.textBaseline] = ALIGN[align];
-    this.source[type + 'Style'] = color;
-
-    if (this.source.textBaseline == 'bottom') y = y - (str.length - 1) * this._size;
-    if (this.source.textBaseline == 'middle') y = y - (str.length - 1) * this._size * .5;
+  drawMultiLine(str, x, y, color='#000', type='fill', align='lt', program=this.graphics.programList.image, params={}) {
+    const [ textAling, textBaseline ] = ALIGN[align];
+    if (textBaseline == 'bottom') y = y - (str.length - 1) * this._size;
+    if (textBaseline == 'middle') y = y - (str.length - 1) * this._size * .5;
     for (let i = 0; i < str.length; i++)
-      this.source[type + 'Text'](str[i], x, y + this._size * i);
+      this.draw(str[i], x, y + this._size * i, color, type, align, program, params);    
   }
 
   /**

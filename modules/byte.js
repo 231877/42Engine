@@ -76,7 +76,7 @@ export class Byte {
         if (func(key) == -1) return false;
       }
       return true;
-    } catch(err) { return Add.error(err, ERRORNOKEY); }
+    } catch(err) { return console.log('!', err); }
   }
 
   /** 

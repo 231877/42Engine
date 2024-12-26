@@ -1,7 +1,7 @@
 import { Byte } from './byte.js';
 
 export class Controller {
-  constructor(game, rule) {
+  constructor(game, rule, type='keydown') {
     this.rule = rule;
     const arr = [];
     for (const code in this.rule)
@@ -9,6 +9,7 @@ export class Controller {
     this.key = new Byte(...arr);
     game.addEvent(this);
     this.game = game;
+    this.type = type;
   }
 
   event(e) {
@@ -20,7 +21,7 @@ export class Controller {
       //return false;
     }
     if (code in this.rule)
-      this.key[e.type == 'keydown' ? 'add' : 'clear'](this.rule[code]);
+      this.key[e.type == this.type ? 'add' : 'clear'](this.rule[code]);
     
     return true;
   }

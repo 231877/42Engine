@@ -26,6 +26,7 @@ Object.defineProperty(random, 'seed', {
     }
     this._seed = seed;
     //Add.debug('Установлен random.seed:', seed);
+    this.strSeed = seed;
     return this._seed;
   }
 });
