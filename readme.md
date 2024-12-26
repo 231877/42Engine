@@ -1,19 +1,21 @@
-Game engine using vanilla Javascript and Canvas API for graphics rendering. It does not have a graphical user interface, and any well-known project bundler can be used for project assembly!
+# 42eng
 
-> !NOTE
-> The engine uses the [MIT](./LICENSE.txt) license, which gives you complete freedom. The only requirement is to have a LICENSE.txt file in the project folder.
+42eng is a game engine written in pure JavaScript using WebGL for high-performance graphics. This project is designed for developing games with fast rendering and flexible configuration.
 
-## Supported Browsers
+## Features
 
-- Google Chrome
-- Mozilla Firefox
-- Safari
-- Opera
-- Edge
+- Fully written in JavaScript.
+- Uses WebGL for rendering.
+- Flexibility and customization for various types of games.
 
-Other browsers with Canvas API support
+## Documentation
 
-## Translations:
-- [English](./readme.md)
-- [Русский](./src/langs/readme.ru.md)
-- [Français](./src/langs/readme.fr.md)
+For detailed information about the API and engine usage, visit our [Wiki section](https://github.com/wmgcat/42eng/wiki).
+
+## Contributing
+
+We welcome community contributions! Check out our [contribution guide](CONTRIBUTING.md) to learn how you can help improve the project.
+
+## License
+
+42eng is distributed under the [MIT license](LICENSE.txt).

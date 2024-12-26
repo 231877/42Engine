@@ -296,5 +296,3 @@ export class Game {
     })(func);
   }
 }
-
-

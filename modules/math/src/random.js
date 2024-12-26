@@ -42,5 +42,3 @@ random.rand = function() {
   let numb = Math.sin(this._seed++) * 1000;
   return Math.min(Math.max(numb - ~~numb, 0), 1);
 }
-
-

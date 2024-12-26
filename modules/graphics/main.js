@@ -162,7 +162,6 @@ class Graphics {
   get w() { return this.link.width; }
   get h() { return this.link.height; }
 
-
   shader(id, type, code) {
     if (!this.source) return false;
 
@@ -290,27 +289,6 @@ class Graphics {
       cLocation: [...this.rgb(color), alpha],
       ...params
     });
-  }
-
-  /**
-   * Рисует прямоугольник с закругленными краями
-   * 
-   * @param {number} x X
-   * @param {number} y Y
-   * @param {number} w Ширина
-   * @param {number} h Высота
-   * @param {number|Array} range Скругление краев. Можно указать каждый угол отдельно, используя массив
-   * @param {string|object} color='#000' Цвет или Текстура
-   * @param {string} type='fill' Заполнение, может быть fill или stroke
-  */
-  round(x, y, w, h, range, color='#000', type='fill') {
-    /*this.source[type + 'Style'] = color;
-    this.source.beginPath();
-      if (!this.source.roundRect) this.source.rect(x, y, w, h);
-      else this.source.roundRect(x, y, w, h, range);
-
-      this.source[type]();
-    this.source.closePath();*/
   }
 
   /**
