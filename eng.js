@@ -17,7 +17,7 @@ export class Game {
       title: params.title || '42eng', author: params.author || 'wmgcat',
       debug: params.debug || false,
       build: {
-        v: '1.8',
+        v: '1.9',
         href: 'https://github.com/wmgcat/42eng'
       },
       window: {
