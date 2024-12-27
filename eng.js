@@ -45,7 +45,7 @@ export class Game {
     this.ratio = 0;
     
     this.ignoreKeyboard = false;
-    this.ignoreMouse = false;
+    this.ignoreMouse = params.ignoreMouse || false;
 
     this.mouse = {
       x: 0, y: 0,
@@ -210,8 +210,14 @@ export class Game {
       }
     }
 
-    this.canvasID.onwheel = e => e.preventDefault();
-    this.canvasID.oncontextmenu = e => e.preventDefault();
+    this.canvasID.onwheel = e => {
+      if (this.ignoreMouse) return;
+      e.preventDefault();
+    }
+    this.canvasID.oncontextmenu = e => {
+      if (this.ignoreMouse) return;
+      e.preventDefault();
+    }
 
     window.onfocus = () => { this.event('focus'); }
     window.onblur = () => { this.event('blur'); }
